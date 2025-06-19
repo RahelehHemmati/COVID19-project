@@ -1,0 +1,169 @@
+---
+title: "Covid-19 Data Analysis"
+author: "Raheleh"
+date: "2025-06-17"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(lubridate)
+library(knitr)
+library(scales)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+In this project, I analyze the COVID-19 dataset from the Johns Hopkins University GitHub repository. The goal is to uncover trends, create visualizations, and build a simple model to understand the spread of the virus over time. The following are the steps:
+
+1. **Importing Data**: Import the dataset into R from the Johns Hopkins University GitHub repository.
+2. **Cleaning Data**:transformed the data set from wide to a long format, converted the date column into a proper date format, and grouped the data by country and date to prepare it for analysis.
+3. **Data Visualization**: Created charts to explore the progression of COVID-19 cases over time across different countries and to compare the highest cumulative case counts among countries on the most recent date.
+4. **Analysis and Modeling**: Execute a basic statistical analysis and fit a linear model to explore trends in case growth over time.
+5. **Bias and limitation**: Highlight potential biases in the data and methodology.
+6. **Conclusion**: Summarize key findings and discuss limitations.
+
+# Data Import
+
+ I imported the shooting dataset using read_csv() from the URL below, I also installed the necessary R packages including: tidyverse, lubridate, knitr and scales
+
+
+
+
+```{r data-import}
+url <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv"
+covid_raw <- read.csv(url)
+dim(covid_raw)
+
+```
+
+The dataset contains 289 rows and 1147 columns with various information such as Province.State, Country.Region, Lat and Long and...
+
+# Data Cleaning and Tidying
+I reshaped the original wide format dataset into a long format table to make it easier to analyze. This involved:
+- Converting multiple date columns into a single column.
+- Removing the "X" character from the dates and converting them into proper date objects.
+- Grouping the data by country and date, then summing the cases for each group.
+
+
+```{r tidy-data}
+covid_long <- covid_raw %>%
+  pivot_longer(
+    cols = starts_with("X"),
+    names_to = "date",
+    values_to = "cases"
+  ) %>%
+  mutate(
+    date = mdy(str_remove(date, "X"))
+  ) %>%
+  group_by(Country.Region, date) %>%
+  summarise(cases = sum(cases), .groups = 'drop')
+# Summary of cleaned data
+summary(covid_long)
+```
+
+ 
+# Data Visualization
+
+## Cases Over Time for Top 5 Countries
+This line chart shows how the number of confirmed COVID-19 cases has changed over time in the top 5 countries with the highest total case counts
+
+```{r plot-top-countries}
+top_countries <- covid_long %>%
+  filter(date == max(date)) %>%
+  top_n(5, cases) %>%
+  pull(Country.Region)
+
+covid_long %>%
+  filter(Country.Region %in% top_countries) %>%
+  ggplot(aes(x = date, y = cases, color = Country.Region)) +
+  geom_line() +
+  scale_y_continuous(labels = comma) +
+  labs(title = "COVID-19 Confirmed Cases Over Time",
+       x = "Date", y = "Cases", color = "Country")
+```
+According to this line chart, some countries like U.S. and India  show a steep rise in confirmed cases, indicating rapid transmission over time. The different starting points suggest that some countries were affected earlier than others. A flattening curve toward the end, implies the outbreak may be stabilizing, this is more noticeable for India. In contrast, the U.S curve continuous to rise,suggesting the virus is still spreading actively. Additionally, the height of the lines represents the total number of cumulative cases, so we can visually confirm that the U.S had the most confirmed cases at nearly every point in time while, Germany had comparatively fewer.
+
+## Cases on the Latest Date
+
+This horizontal bar chart shows the total number of confirmed COVID-19 cases for the top 10 countries as of the most recent date in the data set. It also provides a clear snapshot of which countries have been most affected overall, allowing for easy comparison of the pandemic’s total impact across nations.
+
+```{r bar-plot-latest}
+covid_latest <- covid_long %>%
+  filter(date == max(date)) %>%
+  top_n(10, cases)
+
+ggplot(covid_latest, aes(x = reorder(Country.Region, cases), y = cases)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  scale_y_continuous(labels = comma) +
+  labs(title = "Top 10 Countries by Confirmed Cases (Latest Date)",
+       x = "Country", y = "Cases")
+```
+In this graph we can see U.S had the highest cumulative number of confirmed COVID_19 cases as of the latest date in the data set.Among the top 10 countries, Russia had the lowest total case count, though it still ranks high globally.
+
+# Analysis and Modeling
+**Case Growth in the U.S.**
+
+this linear regression model estimates the relationship between time and the number of confirmed COVID-19 cases in the U.S.
+
+```{r simple-model}
+us_data <- covid_long %>%
+  filter(Country.Region == "US")
+
+model <- lm(cases ~ date, data = us_data)
+summary(model)
+
+# Plot with fitted line
+us_data %>%
+  ggplot(aes(x = date, y = cases)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  labs(title = "U.S. COVID-19 Case Growth with Linear Fit",
+       x = "Date", y = "Cases")
+```
+**Interpretation**:
+
+The linear model shows a strong upward trend in confirmed COVID-19 cases in the U.S. over time.
+The positive slope indicates that cases were increasing consistently, and the model helps us quantify that average daily growth.
+
+
+# Bias and Limitations
+
+**Sources of Bias**
+
+- **Data Reporting Bias**: COVID-19 case counts rely on testing and reporting systems that vary by country. Some nations may underreport due to limited testing capacity, political pressures, or inconsistent definitions of a “confirmed case.”
+
+- **Time Lag Bias**: There may be delays in how quickly new cases are recorded and published, especially in countries with less real time reporting infrastructure.
+
+- **Selection Bias**: The analysis focuses only on the top 5 or top 10 countries and on U.S. data specifically. This choice, while practical, may overlook important trends in less affected or underrepresented countries.
+
+- **Modeling Bias**: A linear model is used to describe U.S. case growth. This assumes a constant rate of increase, which may not reflect real-world surges, plateaus, or the effects of interventions like lockdowns and vaccinations.
+
+- **Analytical Bias**: Methodological choices (e.g., focusing on cumulative cases instead of new daily cases, or excluding population size) influence the insights drawn and may favor more populous countries.
+
+
+# Conclusions and limitations
+
+This report examined global COVID-19 trends using publicly available data. We visualized time series patterns, explored top affected countries, and applied a basic model to U.S. data. following is the key findings and limitations:
+
+**Findings:**
+
+- The United States consistently had the highest number of confirmed COVID-19 cases over time, followed by countries like India and Brazil.
+
+- A line chart showed that case counts in the top 5 countries increased at different rates, with the U.S. experiencing ongoing growth and India showing signs of stabilization.
+
+- A bar chart captured the top 10 countries with the highest cumulative cases on the latest date, allowing for an easy comparison of the pandemic's total impact.
+
+- A linear model was fitted to U.S. case data, revealing a strong upward trend and quantifying average daily case growth.
+
+**limitations:**
+
+- The dataset may contain underreporting, delays, and inconsistent case definitions, especially across countries.
+
+- The analysis only includes cumulative confirmed cases and does not adjust for population size, which may affect comparisons.
+
+- The use of a linear model oversimplifies real-world trends, such as waves of infection and public health interventions.
+
+- The focus on the U.S. and top countries introduces selection bias, limiting global generalization.
+
